@@ -1,7 +1,7 @@
 {
   "name": "student-registration",
   "version": "1.0.0",
-  "description": "Student Registration with Cloudinary + MongoDB",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -15,3 +15,4 @@
     "body-parser": "^1.20.2"
   }
 }
+
