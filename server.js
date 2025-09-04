@@ -1,73 +1,71 @@
 import express from "express";
-import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
 import mongoose from "mongoose";
+import multer from "multer";
+import cloudinary from "cloudinary";
 import cors from "cors";
 import bodyParser from "body-parser";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
 
-const upload = multer({ dest: "uploads/" });
-
-// Cloudinary config using environment variables
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+// Configure Cloudinary
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET
 });
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => console.error(err));
 
-// Student schema
+// Multer setup for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+// Mongoose Schema
 const studentSchema = new mongoose.Schema({
   name: String,
   studentId: String,
   college: String,
-  photoUrl: String,
-  createdAt: { type: Date, default: Date.now }
+  photoUrl: String
 });
-
 const Student = mongoose.model("Student", studentSchema);
 
-// API route
+// Route to register student
 app.post("/register", upload.single("photo"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
+    const { name, studentId, college } = req.body;
+    if (!req.file) return res.status(400).json({ error: "Photo is required" });
 
-    // Upload image to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path);
+    // Upload to Cloudinary
+    const result = await cloudinary.v2.uploader.upload_stream(
+      { folder: "students" },
+      async (error, result) => {
+        if (error) return res.status(500).json({ error });
 
-    // Save student details
-    const student = new Student({
-      name: req.body.name,
-      studentId: req.body.studentId,
-      college: req.body.college,
-      photoUrl: result.secure_url
-    });
+        // Save student in MongoDB
+        const student = new Student({
+          name,
+          studentId,
+          college,
+          photoUrl: result.secure_url
+        });
+        await student.save();
+        res.json({ message: "Student registered successfully", student });
+      }
+    );
 
-    await student.save();
-    res.json({ message: "Student registered successfully", student });
+    result.end(req.file.buffer); // Send file buffer to Cloudinary
+
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Serve frontend
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+app.listen(process.env.PORT || 10000, () => {
+  console.log("Server running on port 10000");
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
