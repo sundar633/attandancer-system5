@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Registration</title>
+  <style>
+    body { font-family: Arial; display:flex; justify-content:center; align-items:center; height:100vh; background:#eef2f3; }
+    .card { background:#fff; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2); width:380px; text-align:center; }
+    .form-group { margin-bottom:15px; text-align:left; }
+    .form-group label { display:block; font-weight:bold; margin-bottom:6px; }
+    .form-group input { width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; }
+    #video, #captured-img { width:100%; border-radius:8px; margin-top:10px; display:none; }
+    button { background:#007bff; color:white; padding:10px 15px; border:none; border-radius:6px; cursor:pointer; margin:5px; font-size:14px; }
+    button:hover { background:#0056b3; }
+    #captureBtn { display:none; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Student Registration</h2>
+  <form id="studentForm">
+    <div class="form-group"><label>Name</label><input type="text" id="name" required></div>
+    <div class="form-group"><label>Student ID</label><input type="text" id="studentId" required></div>
+    <div class="form-group"><label>College</label><input type="text" id="college" required></div>
+    <div class="form-group"><label>Upload Photo</label><input type="file" accept="image/*" id="upload"></div>
+
+    <div>
+      <button type="button" id="startBtn" onclick="startCamera()">📷 Take Live Picture</button>
+      <button type="button" id="captureBtn" onclick="capturePhoto()">✅ Capture</button>
+    </div>
+
+    <video id="video" autoplay></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="captured-img" alt="Captured Image"/>
+
+    <br><button type="submit">Submit</button>
+  </form>
+</div>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const capturedImg = document.getElementById('captured-img');
+  const startBtn = document.getElementById('startBtn');
+  const captureBtn = document.getElementById('captureBtn');
+  const uploadInput = document.getElementById("upload");
+
+  let stream;
+  let capturedDataUrl = null;
+
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.style.display = "block";
+      video.srcObject = stream;
+      startBtn.style.display = "none";
+      captureBtn.style.display = "inline-block";
+    } catch (err) { alert("Camera access denied!"); }
+  }
+
+  function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t=>t.stop()); video.srcObject=null; video.style.display="none"; }
+  }
+
+  function capturePhoto() {
+    const context = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video,0,0,canvas.width,canvas.height);
+    capturedDataUrl = canvas.toDataURL("image/png");
+    capturedImg.src = capturedDataUrl;
+    capturedImg.style.display="block";
+    stopCamera();
+    captureBtn.style.display="none";
+    startBtn.style.display="inline-block";
+  }
+
+  document.getElementById("studentForm").addEventListener("submit", async function(e){
+    e.preventDefault();
+    const name = document.getElementById("name").value.trim();
+    const studentId = document.getElementById("studentId").value.trim();
+    const college = document.getElementById("college").value.trim();
+    if(!name || !studentId || !college){ alert("Fill all fields!"); return; }
+
+    let fileBlob = null;
+    if(capturedDataUrl){
+      const res = await fetch(capturedDataUrl);
+      fileBlob = await res.blob();
+    } else if(uploadInput.files.length>0){
+      fileBlob = uploadInput.files[0];
+    } else { alert("Upload or capture photo!"); return; }
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("studentId", studentId);
+    formData.append("college", college);
+    formData.append("photo", fileBlob, `${studentId}.png`);
+
+    try{
+      const res = await fetch("/register", { method:"POST", body:formData });
+      const data = await res.json();
+      if(data.error){ alert("Error: "+data.error); } else { alert("Student registered successfully!"); document.getElementById("studentForm").reset(); capturedImg.style.display="none"; capturedDataUrl=null; }
+    }catch(err){ alert("Error: "+err.message); }
+  });
+</script>
+
+</body>
+</html>
